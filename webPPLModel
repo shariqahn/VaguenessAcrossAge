@@ -1,0 +1,113 @@
+var sizes = [1,2,3,4,5,6,7]
+var statePrior = function() {
+    return uniformDraw(sizes);
+};
+
+var ages = ["2", "3", "4", "5", "6", "7", "adult"]
+var agePrior = function() {
+    return uniformDraw(ages);
+};
+
+var thetaBig = {
+  "2": 7.,
+  "3": 7.,
+  "4": 5.,
+  "5": 5.,
+  "6": 5.,
+  "7": 5.,
+  "adult": 6.
+};
+
+var thetaSmall = {
+  "2": 1.,
+  "3": 1.,
+  "4": 3.,
+  "5": 3.,
+  "6": 3.,
+  "7": 3.,
+  "adult": 3.
+};
+
+var alpha = 2; // optimality parameter
+
+var utterances = ["big", "small", ""];
+var cost = {
+  "big": 0.01,
+  "small": 0.01,
+  "": 0
+};
+var utterancePrior = function() {
+  return uniformDraw(utterances);
+};
+
+var meaning = function(utterance, size, age) {
+  if (utterance == "big") {
+    var theta = sample(Gaussian({mu: thetaBig[age], sigma: .2}))
+    return size >= theta ? .95 : .05
+  } 
+  
+  if (utterance == "small") {
+    var theta = sample(Gaussian({mu: thetaSmall[age], sigma: .2}))
+    return size <= theta ? .95 : .05
+  }
+  
+  return 1;
+};
+
+var literalListener = cache(function(utterance, age) {
+  return Infer({method: "MCMC", samples:5000}, function() {
+    var size = statePrior();
+    factor(alpha * Math.log(meaning(utterance, size, age)))
+    return size;
+  });
+});
+
+var speaker = cache(function(size, age) {
+  return Infer({method: "enumerate"}, function() {
+    var utterance = utterancePrior();
+    factor( alpha * (literalListener(utterance, age).score(size)
+                    - cost[utterance]));
+    return utterance;
+  });
+});
+
+var pragmaticListener = function(utterance) {
+  return Infer({method: "enumerate"}, function() {
+    var size = statePrior();
+    var age = agePrior();
+    factor(speaker(size, age).score(utterance));
+    return { size: size, age: age };
+  });
+};
+
+var bigObject = pragmaticListener("big");
+viz.auto(marginalize(bigObject, "size"));
+viz.auto(marginalize(bigObject, "age"));
+
+var smallObject = pragmaticListener("small");
+viz.auto(marginalize(smallObject, "size"));
+viz.auto(marginalize(smallObject, "age"));
+
+var object = pragmaticListener("");
+viz.auto(marginalize(object, "size"));
+viz.auto(marginalize(object, "age"));
+
+viz.auto(speaker(1, "2"), [{xLabel: "hi"}]);
+viz.auto(speaker(1, "4"));
+viz.auto(speaker(1, "7"));
+viz.auto(speaker(1, "adult"));
+
+viz.auto(speaker(3, "2"));
+viz.auto(speaker(3, "4"));
+viz.auto(speaker(3, "7"));
+viz.auto(speaker(3, "adult"));
+
+viz.auto(speaker(5, "2"));
+viz.auto(speaker(5, "4"));
+viz.auto(speaker(5, "7"));
+viz.auto(speaker(5, "adult"));
+
+viz.auto(speaker(7, "2"));
+viz.auto(speaker(7, "4"));
+viz.auto(speaker(7, "7"));
+viz.auto(speaker(7, "adult"));
